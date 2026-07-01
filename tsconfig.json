@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "baseUrl": ".",
+    "paths": {
+      "@slidev-ppt/shared": ["packages/shared/src/index.ts"],
+      "@slidev-ppt/shared/*": ["packages/shared/src/*"]
+    }
+  },
+  "exclude": ["**/node_modules", "**/dist", "**/.output", "**/.nuxt"]
+}
