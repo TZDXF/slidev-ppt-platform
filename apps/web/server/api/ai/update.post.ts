@@ -11,13 +11,17 @@
  *
  * 确认回流：前端带 requestId + confirm:true 再次调用 → 直接 apply 缓存的 ops，不重跑 AI。
  *
- * SSE 事件：
- *   reason          { delta }             AI 说明增量
- *   ops             { ops }               EditOp[]
- *   pending_confirm { requestId, ops }    破坏性 ops 待确认（未 apply）
- *   applied         { md, slides, snapshotId, previousMd }
- *   done            {}
- *   error           { message }
+ * SSE 传输层契约（与前端 stores/chat.ts 的 chunk 协议对齐）：
+ *   每个 SSE 事件的 data 负载都是一个带 type 字段的 chunk，前端按 type 分发，
+ *   event 名仅作服务端自描述、前端不消费：
+ *     text            { type:'text', delta }                  AI 说明增量（打字机）
+ *     done            { type:'done', ops, md?, slides?, ... }  结束；带 ops 与 apply 后的 md
+ *     pending_confirm { type:'pending_confirm', requestId, ops, message }
+ *     error           { type:'error', message }
+ *
+ * 说明：保留 PR #3 的真实 Claude 链路（streamMessages / OpsCollector / 服务端 apply +
+ * 版本快照 + 确认回流），SSE 输出层改用 PR #4 的 chunk 协议（text→done→error），
+ * createSseStream 的 close 兜底客户端断连（req close abort）。
  */
 import type { EditOp } from '@slidev-ppt/shared';
 import { applyOps, parseSlidev, serializeSlidev } from '@slidev-ppt/shared';
@@ -32,6 +36,14 @@ interface UpdateBody {
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   confirm?: boolean;
   requestId?: string;
+}
+
+/** 结束 chunk 携带的 apply 结果（服务端 apply 后写回的新 MD 与快照信息）。 */
+interface AppliedResult {
+  md: string;
+  slides: number;
+  snapshotId: string;
+  previousMd: string;
 }
 
 export default defineEventHandler(async (event) => {
@@ -60,11 +72,9 @@ export default defineEventHandler(async (event) => {
       if (body.confirm && body.requestId) {
         const cached = popPendingOps(body.requestId);
         if (cached) {
-          send('reason', { delta: '应用上次待确认的修改。' });
-          send('ops', { ops: cached });
+          send('reason', { type: 'text', delta: '应用上次待确认的修改。' });
           const applied = applyAndSnapshot(body.docMd ?? '', cached);
-          send('applied', applied);
-          send('done', {});
+          send('done', { type: 'done', ops: cached, ...applied });
           return;
         }
         // 缓存失效：落到 AI 流程重新生成
@@ -76,7 +86,7 @@ export default defineEventHandler(async (event) => {
       // ---- 收集 ops ----
       let resolvedOps: EditOp[] = [];
       const collector = new OpsCollector(cfg.opsMode, {
-        onReasonDelta: (delta) => send('reason', { delta }),
+        onReasonDelta: (delta) => send('reason', { type: 'text', delta }),
         onOps: (ops) => {
           resolvedOps = ops;
         },
@@ -102,10 +112,9 @@ export default defineEventHandler(async (event) => {
       collector.finish();
 
       const ops = resolvedOps;
-      send('ops', { ops });
 
       if (ops.length === 0) {
-        send('done', {});
+        send('done', { type: 'done', ops });
         return;
       }
 
@@ -114,20 +123,20 @@ export default defineEventHandler(async (event) => {
       if (destructive && !body.confirm) {
         const requestId = cachePendingOps(ops);
         send('pending_confirm', {
+          type: 'pending_confirm',
           requestId,
           ops,
           message: '本次修改包含删页 / 重排操作，需确认后才会应用',
         });
-        send('done', {});
+        send('done', { type: 'done', ops });
         return;
       }
 
       // ---- apply + 存版本快照 ----
       const applied = applyAndSnapshot(body.docMd ?? '', ops);
-      send('applied', applied);
-      send('done', {});
+      send('done', { type: 'done', ops, ...applied });
     } catch (e) {
-      send('error', { message: (e as Error).message });
+      send('error', { type: 'error', message: (e as Error).message });
     } finally {
       close();
     }
@@ -137,7 +146,7 @@ export default defineEventHandler(async (event) => {
 });
 
 /** apply 前存版本快照，返回新 MD 与快照信息。 */
-function applyAndSnapshot(docMd: string, ops: EditOp[]) {
+function applyAndSnapshot(docMd: string, ops: EditOp[]): AppliedResult {
   const doc = parseSlidev(docMd);
   const snapshotId = storeSnapshot(docMd);
   const newDoc = applyOps(doc, ops);
