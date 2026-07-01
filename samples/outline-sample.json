@@ -1,0 +1,57 @@
+{
+  "title": "Slidev PPT 平台产品功能介绍",
+  "theme": "default",
+  "slides": [
+    {
+      "title": "Slidev PPT 平台",
+      "points": [
+        "下一代开发者友好的演示文稿工具",
+        "基于 Markdown 的幻灯片创作体验",
+        "支持代码高亮、实时演示、国际化"
+      ],
+      "imageSuggestion": "科技感封面图，展示 Slidev 品牌标识",
+      "componentSuggestion": ""
+    },
+    {
+      "title": "核心功能特性",
+      "points": [
+        "Markdown 语法支持 - 纯文本编写幻灯片",
+        "内置代码高亮 - 60+ 主题可选",
+        "实时演示模式 - 演讲者视图支持",
+        "组件化扩展 - Vue 组件直接引入"
+      ],
+      "imageSuggestion": "功能模块布局图，展示四大核心功能",
+      "componentSuggestion": ""
+    },
+    {
+      "title": "功能使用分布",
+      "points": [
+        "代码高亮功能使用率最高",
+        "实时演示功能增长迅速",
+        "组件化扩展受到开发者青睐"
+      ],
+      "imageSuggestion": "",
+      "componentSuggestion": "BarChart"
+    },
+    {
+      "title": "平台关键数据",
+      "points": [
+        "活跃创作者数量",
+        "累计生成的幻灯片",
+        "社区主题数量"
+      ],
+      "imageSuggestion": "",
+      "componentSuggestion": "StatCard"
+    },
+    {
+      "title": "感谢关注",
+      "points": [
+        "开始使用 Slidev",
+        "访问官方文档",
+        "加入社区交流"
+      ],
+      "imageSuggestion": "简洁有好的结束页配图",
+      "componentSuggestion": ""
+    }
+  ]
+}

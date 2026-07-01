@@ -14,6 +14,9 @@ export default defineNuxtConfig({
   runtimeConfig: {
     anthropicApiKey: '', // ANTHROPIC_API_KEY，国内需走代理
     anthropicBaseUrl: '', // ANTHROPIC_BASE_URL，代理地址
+    anthropicChatModel: '', // ANTHROPIC_CHAT_MODEL，对话/页级 CRUD（默认 claude-sonnet-4-6）
+    anthropicStructureModel: '', // ANTHROPIC_STRUCTURE_MODEL，大纲/全量重生成（默认 claude-opus-4-8）
+    aiOpsMode: 'tool_use', // AI_OPS_MODE：tool_use（生产）| json（兼容不支持 tool_use 的代理）
     renderServiceUrl: '', // RENDER_SERVICE_URL，渲染调度服务地址
     public: {
       // 客户端可见配置
