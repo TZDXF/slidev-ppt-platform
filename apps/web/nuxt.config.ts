@@ -42,7 +42,7 @@ export default defineNuxtConfig({
     anthropicChatModel: '', // ANTHROPIC_CHAT_MODEL，对话/页级 CRUD（默认 claude-sonnet-4-6）
     anthropicStructureModel: '', // ANTHROPIC_STRUCTURE_MODEL，大纲/全量重生成（默认 claude-opus-4-8）
     aiOpsMode: 'tool_use', // AI_OPS_MODE：tool_use（生产）| json（兼容不支持 tool_use 的代理）
-    renderServiceUrl: '', // RENDER_SERVICE_URL，渲染调度服务地址
+    renderServiceUrl: process.env.RENDER_SERVICE_URL || '', // RENDER_SERVICE_URL，渲染调度服务地址（control API 经 server 代理，previewUrl 直连）
     public: {
       // 客户端可见配置
     },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { PanelLeft, Code2, Eye } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import ChatPanel from '@/components/chat/ChatPanel.vue';
@@ -14,8 +14,9 @@ const editorVisible = ref(false);
 // 窄屏折叠左栏
 const chatOpen = ref(true);
 
-// 渲染服务预览 URL 暂为占位，待渲染服务工程师接入
-const previewUrl = '';
+// 打开编辑器即启动渲染会话；离开时释放容器（与服务端空闲回收双保险）
+onMounted(() => { void doc.startPreview(); });
+onBeforeUnmount(() => { void doc.stopPreview(); });
 </script>
 
 <template>
@@ -87,7 +88,14 @@ const previewUrl = '';
 
       <!-- 右：Slidev 预览 -->
       <main class="flex min-w-0 flex-1 flex-col">
-        <PreviewFrame :url="previewUrl" class="h-full" />
+        <PreviewFrame
+          :url="doc.previewUrl"
+          :status="doc.previewStatus"
+          :queue-position="doc.queuePosition"
+          :error-message="doc.previewError"
+          class="h-full"
+          @retry="doc.retryPreview"
+        />
       </main>
 
       <!-- 窄屏遮罩：对话栏展开时点击空白关闭 -->
