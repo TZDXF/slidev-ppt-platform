@@ -42,6 +42,8 @@ export interface Session {
   readyWaiters: Array<() => void>;
   /** 当前是否处于健康检查的宽限期内 */
   inGrace: boolean;
+  /** 最近一次启动/崩溃失败的原因与容器日志（failed 态时回传给前端排查） */
+  lastError?: string;
 }
 
 /** 调度指标快照 */

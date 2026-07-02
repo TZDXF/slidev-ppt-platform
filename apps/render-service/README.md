@@ -75,6 +75,7 @@
 | `RENDER_IMAGE` | slidev-ppt-render:latest | 基础镜像 |
 | `SANDBOX_NETWORK` | slidev-sandbox | 内网 network（--internal） |
 | `SESSIONS_DIR` | ./.sessions | 会话文件根目录 |
+| `SESSION_VOLUME` | render-sessions | 会话命名卷名（dev server 容器以 :ro 挂载到 /deck；compose 下须与 volumes 声明一致） |
 | `PREVIEW_BASE` | http://localhost:3100 | 预览 URL 基址 |
 | `PREVIEW_MODE` | port | port \| subdomain |
 | `DOCKER_MODE` | real | real \| mock（无 Docker 时跑通联调） |

@@ -16,7 +16,6 @@
  *   都重置定时器；超时（默认 5min，可配 5-10min）销毁容器并清理会话目录。
  */
 import { randomBytes } from 'node:crypto';
-import { join, resolve } from 'node:path';
 import { get as httpGet } from 'node:http';
 import { config, buildPreviewUrl } from './config.js';
 import { docker, ensureSandboxNetwork } from './docker.js';
@@ -104,21 +103,45 @@ async function startContainer(s: Session): Promise<void> {
   s.status = 'starting';
   s.startedAt = Date.now();
   s.inGrace = true;
-  const sessionDir = resolve(join(config.sessionsDir, s.docId.replace(/[^a-zA-Z0-9_-]/g, '_')));
-  const started = await docker.start({
-    containerName: s.containerName,
-    sessionDir,
-    componentsDir: s.componentsDir,
-  });
+
+  // 启动前必须先把 slides.md 落盘成普通文件（自愈历史残留的目录），并建好 components 符号链接。
+  // 否则容器内 Slidev 读到目录即 EISDIR 崩溃。writeMd 内部会同步 statSync 确认是文件。
+  await sessionStore.writeMd(s.docId, s.md);
+  await sessionStore.ensureComponentsSymlink(s.docId).catch(() => {});
+
+  const safeDocId = s.docId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  // 命名卷在容器内挂到 /deck，slides.md 位于 /deck/<docId>/slides.md
+  const slidesPath = `/deck/${safeDocId}/slides.md`;
+  // Vite base 与反代前缀一致，资源/HMR 路径才能经 /p/<token>/* 正确解析
+  const basePath = `/p/${s.token}/`;
+  let started: { containerName: string; hostPort: number };
+  try {
+    started = await docker.start({
+      containerName: s.containerName,
+      slidesPath,
+      basePath,
+      componentsDir: s.componentsDir,
+    });
+  } catch (e) {
+    s.lastError = `docker start 失败: ${(e as Error).message}`;
+    throw e;
+  }
   s.hostPort = started.hostPort;
 
-  // 等待 dev server 就绪（轮询 HTTP /）
-  await waitReady(s);
+  // 等待 dev server 就绪（轮询 HTTP /）；超时则抓容器日志便于排查
+  try {
+    await waitReady(s);
+  } catch (e) {
+    const logs = await docker.logs(s.containerName).catch(() => '');
+    s.lastError = `${(e as Error).message}\n--- container logs ---\n${logs}`;
+    throw e;
+  }
   s.inGrace = false;
   s.readyAt = Date.now();
   s.coldStartMs = s.readyAt - (s.startedAt ?? s.readyAt);
   s.status = 'ready';
   s.previewUrl = buildPreviewUrl(s.token);
+  s.lastError = undefined;
   lastColdStartMs = s.coldStartMs;
   coldStartTotal += s.coldStartMs;
   coldStartSamples += 1;
@@ -138,7 +161,10 @@ async function waitReady(s: Session): Promise<void> {
     return;
   }
   const deadline = (s.startedAt ?? Date.now()) + config.startGraceMs;
-  const url = `http://127.0.0.1:${s.hostPort ?? 0}/`;
+  // 关键：render-service 自身跑在容器里，127.0.0.1:<hostPort> 是宿主端口映射，容器内 loopback 不可达。
+  // render-service 与 dev server 同处 slidev-sandbox 网络时，按容器名 + 容器内端口直连（用户自定义
+  // bridge 网络自带容器名 DNS 解析）。hostPort 仅留给宿主调试/指标，不用于反代。
+  const url = `http://${s.containerName}:${config.containerPort}/`;
   while (Date.now() < deadline) {
     try {
       const ok = await httpOk(url);
@@ -223,6 +249,7 @@ export async function acquire(docId: string, req: PreviewRequest): Promise<Previ
   void startContainer(s).catch((e) => {
     console.error(`[pool] start failed doc=${docId}`, e);
     s!.status = 'failed';
+    if (!s!.lastError) s!.lastError = (e as Error).message;
   });
 
   return {
@@ -231,9 +258,7 @@ export async function acquire(docId: string, req: PreviewRequest): Promise<Previ
     previewUrl: null,
     message: '正在启动 Slidev dev server',
   };
-}
-
-/** 写入 MD（编辑器实时更新）——已存在容器则 Slidev HMR 自动重渲染 */
+}/** 写入 MD（编辑器实时更新）——已存在容器则 Slidev HMR 自动重渲染 */
 export async function writeMd(docId: string, md: string): Promise<PreviewResponse> {
   let s = sessions.get(docId);
   if (s && (s.status === 'ready' || s.status === 'starting' || s.status === 'restarting')) {
@@ -259,6 +284,7 @@ export function getStatus(docId: string): PreviewResponse | null {
     status: s.status,
     previewUrl: s.previewUrl ?? null,
     queuePosition,
+    message: s.status === 'failed' && s.lastError ? s.lastError : undefined,
   };
 }
 
@@ -315,10 +341,12 @@ export async function healthLoop(): Promise<void> {
           console.error(`[pool] restart failed doc=${s.docId}`, e);
           s.status = 'failed';
           s.inGrace = false;
+          if (!s.lastError) s.lastError = (e as Error).message;
           if (s.idleTimer) clearTimeout(s.idleTimer);
         }
       } else {
         s.status = 'failed';
+        if (!s.lastError) s.lastError = `崩溃后重启超过 ${config.maxRestarts} 次`;
         if (s.idleTimer) clearTimeout(s.idleTimer);
         console.error(`[pool] mark failed doc=${s.docId} (exceeded ${config.maxRestarts} restarts)`);
       }
