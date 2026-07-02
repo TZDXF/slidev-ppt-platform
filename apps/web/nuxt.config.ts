@@ -14,7 +14,7 @@ export default defineNuxtConfig({
 
   // monorepo 内 workspace 包需 transpile；reka-ui / codemirror 走 ESM 需转译
   build: {
-    transpile: ['@slidev-ppt/shared', 'reka-ui'],
+    transpile: ['@slidev-ppt/shared', '@slidev-ppt/components', 'reka-ui'],
   },
 
   vite: {
