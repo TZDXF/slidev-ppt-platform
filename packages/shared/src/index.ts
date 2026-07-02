@@ -8,3 +8,4 @@
 export * from './slidev.js';
 export * from './ops.js';
 export * from './apply-ops.js';
+export * from './publish.js';
