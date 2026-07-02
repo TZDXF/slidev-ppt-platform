@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { applyOps, type EditOp } from '@slidev-ppt/shared';
 import { useDocumentStore } from './document';
+import { useSettingsStore } from './settings';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -156,10 +157,14 @@ export const useChatStore = defineStore('chat', () => {
     assistantId: string,
     body: Record<string, unknown>,
   ): Promise<void> {
+    // 合并 web 设置面板的运行时覆盖（模型 / ops 模式 / baseUrl / apiKey），
+    // 留空字段不传，服务端回退 .env。apiKey 仅内存、不入 localStorage。
+    const overrides = useSettingsStore().aiOverrides();
+    const payload = { ...body, ...overrides };
     const res = await fetch('/api/ai/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {

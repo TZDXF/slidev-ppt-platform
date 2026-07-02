@@ -2,6 +2,11 @@
  * 运行时 AI 配置：从 Nuxt runtimeConfig 读取 key / baseUrl / 模型名 / ops 模式。
  *
  * key 与 baseUrl 绝不出服务端 —— 客户端只通过 /api/ai/* SSE 端点间接调用。
+ *
+ * Web 端设置面板（AIP-30）允许前端在 /api/ai/* 请求 body 里携带可选覆盖：
+ * chatModel / structureModel / opsMode / baseUrl / apiKey。getAiConfig(overrides)
+ * 优先用请求里的覆盖值，回退 runtimeConfig（.env），再回退内置默认。
+ * apiKey 覆盖只在本次请求内存中生效，不持久化。
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { DEFAULT_CHAT_MODEL, DEFAULT_STRUCTURE_MODEL, type OpsMode } from './models.js';
@@ -16,14 +21,30 @@ export interface AiConfig {
   opsMode: OpsMode;
 }
 
-export function getAiConfig(): AiConfig {
+/** 前端 /api/ai/* body 里可携带的覆盖参数（全部可选，留空 = 用 .env 默认）。 */
+export interface AiConfigOverrides {
+  chatModel?: string;
+  structureModel?: string;
+  opsMode?: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+function pickOverride(override: string | undefined, rcValue: string | undefined, fallback: string): string {
+  const o = override?.trim();
+  if (o) return o;
+  return (rcValue as string) || fallback;
+}
+
+export function getAiConfig(overrides?: AiConfigOverrides): AiConfig {
   const rc = useRuntimeConfig();
-  const opsMode = (rc.aiOpsMode === 'json' ? 'json' : 'tool_use') as OpsMode;
+  const opsRaw = (overrides?.opsMode?.trim() || rc.aiOpsMode || 'tool_use') as string;
+  const opsMode = (opsRaw === 'json' ? 'json' : 'tool_use') as OpsMode;
   return {
-    apiKey: rc.anthropicApiKey as string,
-    baseUrl: rc.anthropicBaseUrl as string,
-    chatModel: (rc.anthropicChatModel as string) || DEFAULT_CHAT_MODEL,
-    structureModel: (rc.anthropicStructureModel as string) || DEFAULT_STRUCTURE_MODEL,
+    apiKey: pickOverride(overrides?.apiKey, rc.anthropicApiKey as string, ''),
+    baseUrl: pickOverride(overrides?.baseUrl, rc.anthropicBaseUrl as string, ''),
+    chatModel: pickOverride(overrides?.chatModel, rc.anthropicChatModel as string, DEFAULT_CHAT_MODEL),
+    structureModel: pickOverride(overrides?.structureModel, rc.anthropicStructureModel as string, DEFAULT_STRUCTURE_MODEL),
     opsMode,
   };
 }

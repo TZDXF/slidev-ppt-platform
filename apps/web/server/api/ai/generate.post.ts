@@ -8,6 +8,9 @@
  * 模型：复杂结构用 structureModel（默认 opus-4-8）。
  * key / baseUrl 走 runtimeConfig，不出服务端。
  *
+ * Web 设置面板覆盖（AIP-30）：body 可选携带 chatModel/structureModel/opsMode/
+ * baseUrl/apiKey，getAiConfig 优先用请求里的，回退 .env。
+ *
  * SSE 事件：
  *   outline  { outline }            大纲 JSON（第一步完成）
  *   md       { delta }               第二步 MD 增量
@@ -16,8 +19,9 @@
  */
 import { parseSlidev, serializeSlidev } from '@slidev-ppt/shared';
 import type { Outline } from '../../utils/ai/prompts.js';
+import type { AiConfigOverrides } from '../../utils/ai/config.js';
 
-interface GenerateBody {
+interface GenerateBody extends AiConfigOverrides {
   message?: string;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
@@ -29,7 +33,7 @@ export default defineEventHandler(async (event) => {
     return { error: 'message 必填' };
   }
 
-  const cfg = getAiConfig();
+  const cfg = getAiConfig(body);
   try {
     assertConfigured(cfg);
   } catch (e) {

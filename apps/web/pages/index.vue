@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { PanelLeft, Code2, Eye, Rocket, Loader2 } from 'lucide-vue-next';
+import { PanelLeft, Code2, Eye, Rocket, Loader2, Settings } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import ChatPanel from '@/components/chat/ChatPanel.vue';
 import MdEditor from '@/components/editor/MdEditor.vue';
 import PreviewFrame from '@/components/preview/PreviewFrame.vue';
 import PublishDialog from '@/components/publish/PublishDialog.vue';
+import SettingsDialog from '@/components/settings/SettingsDialog.vue';
 import { useDocumentStore } from '@/stores/document';
 import { usePublishStore } from '@/stores/publish';
 
@@ -16,6 +17,8 @@ const pub = usePublishStore();
 const editorVisible = ref(false);
 // 窄屏折叠左栏
 const chatOpen = ref(true);
+// 模型配置面板开关
+const settingsOpen = ref(false);
 
 // 打开编辑器即启动渲染会话；离开时释放容器（与服务端空闲回收双保险）
 onMounted(() => { void doc.startPreview(); });
@@ -42,6 +45,15 @@ onBeforeUnmount(() => { void doc.stopPreview(); });
       </span>
 
       <div class="ml-auto flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8"
+          aria-label="模型配置"
+          @click="settingsOpen = true"
+        >
+          <Settings class="h-4 w-4" />
+        </Button>
         <Button
           :variant="editorVisible ? 'secondary' : 'ghost'"
           size="sm"
@@ -127,5 +139,8 @@ onBeforeUnmount(() => { void doc.stopPreview(); });
 
     <!-- 发布结果浮层 -->
     <PublishDialog />
+
+    <!-- 模型配置浮层 -->
+    <SettingsDialog v-model:open="settingsOpen" />
   </div>
 </template>

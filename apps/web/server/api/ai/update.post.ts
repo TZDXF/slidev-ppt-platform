@@ -29,8 +29,9 @@ import { APPLY_EDITS_TOOL, APPLY_EDITS_TOOL_NAME } from '../../utils/ai/ops-sche
 import { JSON_OPS_OUTPUT_INSTRUCTION, buildUpdateSystemPrompt } from '../../utils/ai/prompts.js';
 import { OpsCollector } from '../../utils/ai/ops-collector.js';
 import { cachePendingOps, popPendingOps, storeSnapshot } from '../../utils/ai/version-store.js';
+import type { AiConfigOverrides } from '../../utils/ai/config.js';
 
-interface UpdateBody {
+interface UpdateBody extends AiConfigOverrides {
   docMd?: string;
   message?: string;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -53,7 +54,7 @@ export default defineEventHandler(async (event) => {
     return { error: 'message 必填（或在确认流程下提供 confirm）' };
   }
 
-  const cfg = getAiConfig();
+  const cfg = getAiConfig(body);
   try {
     assertConfigured(cfg);
   } catch (e) {
