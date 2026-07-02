@@ -6,7 +6,8 @@
  * 组件 / props 的增改由 packages/components/src/schemas.ts 维护，
  * 这里只负责把 JSON schema 翻译成 prompt 友好的文本，不再硬编码组件清单。
  */
-import { componentSchemas, type ComponentSchema } from '@slidev-ppt/components';
+// 走 schemas 子路径，避免从 barrel 拉入 .vue 组件（nitro 服务端构建无法解析 .vue）
+import { componentSchemas, type ComponentSchema } from '@slidev-ppt/components/schemas';
 
 type JsonSchema = Record<string, unknown>;
 

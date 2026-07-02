@@ -1,15 +1,14 @@
-node_modules
-dist
-.output
-.nuxt
-.sessions
+# 任意层级 node_modules / 构建产物 / 临时文件均不进构建上下文
+# （避免宿主 pnpm 绝对符号链接被拷进镜像导致 tsc 解析失败）
+**/node_modules
+**/dist
+**/.output
+**/.nuxt
+**/.sessions
+**/.storage
+
 .git
 .env
 .env.local
 *.log
 .DS_Store
-apps/web/node_modules
-apps/render-service/node_modules
-apps/render-service/dist
-apps/render-service/.sessions
-apps/build-worker/node_modules

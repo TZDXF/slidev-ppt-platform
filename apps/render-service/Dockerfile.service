@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1
+#
+# apps/render-service/Dockerfile.service — 渲染调度服务「自身」运行镜像。
+#
+# 注意区分：
+#   - apps/render-service/Dockerfile         → dev server 容器用的「基础镜像」
+#                                              (slidev-ppt-render:latest，预装 slidev + 主题 + 组件)
+#   - apps/render-service/Dockerfile.service ← 本文件：跑 render-service 这个 Node 服务本身
+#                                              (HTTP 调度 / 反代，按需起停上述基础镜像容器)
+#
+# 本服务通过 `docker` CLI 起停 dev server 容器，故镜像内需 docker 客户端，
+# 运行时挂载宿主 /var/run/docker.sock（仅开发环境；生产用 K8s 或 DinD）。
+#
+# 构建（在仓库根目录）：
+#   docker build -f apps/render-service/Dockerfile.service -t slidev-ppt-render-service:latest .
+
+# ---------- builder ----------
+FROM node:20-slim AS builder
+
+WORKDIR /repo
+RUN corepack enable
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.json ./
+COPY apps/web/package.json apps/web/package.json
+COPY apps/render-service/package.json apps/render-service/package.json
+COPY apps/build-worker/package.json apps/build-worker/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/components/package.json packages/components/package.json
+RUN pnpm install --frozen-lockfile
+
+COPY apps/render-service apps/render-service
+COPY packages packages
+RUN pnpm --filter @slidev-ppt/render-service build
+
+# ---------- runtime ----------
+FROM node:20-slim AS runtime
+
+WORKDIR /app
+
+# docker CLI：本服务通过 execFile('docker', ...) 起停 dev server 容器。
+# 仅装客户端；守护进程在宿主，经 /var/run/docker.sock 接入。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# 拷编译产物与运行时依赖
+COPY --from=builder /repo/node_modules ./node_modules
+COPY --from=builder /repo/apps/render-service/dist ./dist
+COPY --from=builder /repo/apps/render-service/package.json ./package.json
+
+# 会话目录（每文档一个子目录，挂载进 dev server 容器作为 slides.md 来源）
+RUN mkdir -p /data/sessions
+ENV SESSIONS_DIR=/data/sessions
+
+EXPOSE 3100
+
+# 运行时配置（compose 覆盖）：
+#   REDIS_URL（非必需，render-service 当前不直连 Redis）
+#   RENDER_IMAGE / SANDBOX_NETWORK / PREVIEW_BASE / PREVIEW_MODE / DOCKER_MODE
+CMD ["node", "dist/index.js"]

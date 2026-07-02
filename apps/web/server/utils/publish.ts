@@ -9,8 +9,8 @@
  */
 import { Queue } from 'bullmq';
 import Redis from 'ioredis';
-import { RedisPublishStore } from '@slidev-ppt/shared';
-import type { PublishStore, BuildJobData } from '@slidev-ppt/shared';
+import { RedisPublishStore } from '@slidev-ppt/shared/publish';
+import type { PublishStore, BuildJobData } from '@slidev-ppt/shared/publish';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 

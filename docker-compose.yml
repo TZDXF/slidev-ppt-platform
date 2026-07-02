@@ -1,0 +1,161 @@
+# docker-compose.yml — Slidev PPT 平台一键编排（开发 / 实跑）
+#
+# 编排：redis（队列 + PublishStore）+ minio（S3 兼容对象存储，替代 OSS）
+#       + web（Nuxt）+ render-service（dev server 容器调度）+ build-worker（slidev build 队列）。
+#
+# 仅 ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL 需宿主 .env 提供；其余依赖项在此注入。
+#
+# 一键启动：
+#   cp .env.example .env && 填 ANTHROPIC_*
+#   docker compose up -d --build
+#   访问 http://localhost:3000
+#
+# 注意：render-service 启动 dev server 容器用的基础镜像 slidev-ppt-render:latest
+#       需先构建一次（见 README「一键启动」），compose 不自动构建该镜像。
+
+services:
+  # ---- 队列 + 发布元数据 ----
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ---- 本地 S3 兼容对象存储（替代阿里云 OSS）----
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # 一次性：创建 bucket slidev-ppt（minio 就绪后）
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/slidev-ppt &&
+      mc anonymous set download local/slidev-ppt &&
+      echo 'bucket slidev-ppt ready (public download)'
+      "
+    restart: "no"
+
+  # ---- 前端 + Nuxt server routes ----
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: slidev-ppt-web:latest
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      render-service:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      # AI 链路：从宿主 .env 读（国内走代理）
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-step-3.7-flash}
+      ANTHROPIC_STRUCTURE_MODEL: ${ANTHROPIC_STRUCTURE_MODEL:-step-3.7-flash}
+      AI_OPS_MODE: ${AI_OPS_MODE:-tool_use}
+      # 渲染调度服务（compose 内服务名）
+      RENDER_SERVICE_URL: http://render-service:3100
+      # 队列
+      REDIS_URL: redis://redis:6379
+      # 对象存储 → MinIO
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_BUCKET: slidev-ppt
+      OBJECT_STORAGE_REGION: us-east-1
+      OBJECT_STORAGE_FORCE_PATH_STYLE: "true"
+      OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      OBJECT_STORAGE_SECRET_KEY: minioadmin
+      # 开发期公开产物直走 MinIO（生产换 CDN 域）
+      CDN_BASE_URL: http://localhost:9000/slidev-ppt
+
+  # ---- 渲染调度服务（按需起停 dev server 容器）----
+  render-service:
+    build:
+      context: .
+      dockerfile: apps/render-service/Dockerfile.service
+    image: slidev-ppt-render-service:latest
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    environment:
+      PORT: "3100"
+      # previewUrl 经本服务反代（port 模式）；浏览器走宿主 localhost:3100
+      PREVIEW_BASE: http://localhost:3100
+      PREVIEW_MODE: port
+      DOCKER_MODE: real
+      RENDER_IMAGE: slidev-ppt-render:latest
+      SANDBOX_NETWORK: slidev-sandbox
+      SESSIONS_DIR: /data/sessions
+    volumes:
+      # 访问宿主 Docker daemon 以起停 dev server 容器（仅开发环境；生产用 K8s 或 DinD）
+      - /var/run/docker.sock:/var/run/docker.sock
+      - render-sessions:/data/sessions
+
+  # ---- 发布态构建 worker ----
+  build-worker:
+    build:
+      context: .
+      dockerfile: apps/build-worker/Dockerfile
+    image: slidev-ppt-build-worker:latest
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      REDIS_URL: redis://redis:6379
+      BUILD_CONCURRENCY: "2"
+      BUILD_TIMEOUT_MS: "120000"
+      # 对象存储 → MinIO
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_BUCKET: slidev-ppt
+      OBJECT_STORAGE_REGION: us-east-1
+      OBJECT_STORAGE_FORCE_PATH_STYLE: "true"
+      OBJECT_STORAGE_ACCESS_KEY: minioadmin
+      OBJECT_STORAGE_SECRET_KEY: minioadmin
+      # 开发期公开产物直走 MinIO
+      CDN_BASE_URL: http://localhost:9000/slidev-ppt
+      # 镜像内已预装 slidev CLI + 主题（见 Dockerfile）
+      SLIDEV_BIN: slidev
+      COMPONENTS_DIR: /app/packages/components/src
+
+volumes:
+  redis-data:
+  minio-data:
+  render-sessions:

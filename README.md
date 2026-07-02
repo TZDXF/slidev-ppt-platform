@@ -33,3 +33,62 @@ packages/
 ```
 
 详细架构与小队分工见 Multica 项目描述。
+
+## 一键启动（Docker Compose）
+
+编排 redis + minio（S3 兼容对象存储）+ web + render-service + build-worker，
+仅 `ANTHROPIC_API_KEY` / `ANTHROPIC_BASE_URL` 需宿主提供（国内走代理），其余依赖由 compose 注入。
+
+```bash
+# 1. 配置环境变量（填入 ANTHROPIC_*；模型默认 step-3.7-flash，可改）
+cp .env.example .env
+
+# 2. 一次性构建 render-service 启动 dev server 用的基础镜像（预装 slidev + 主题 + 组件）
+docker build -f apps/render-service/Dockerfile -t slidev-ppt-render:latest .
+
+# 3. 构建并启动全部服务
+docker compose up -d --build
+
+# 4. 访问
+#    编辑器：        http://localhost:3000
+#    MinIO console： http://localhost:9001  （minioadmin / minioadmin）
+```
+
+服务端口：
+
+| 服务 | 端口 | 说明 |
+| --- | --- | --- |
+| web | 3000 | Nuxt 前端 + server routes |
+| render-service | 3100 | dev server 容器调度 / 预览反代 |
+| redis | 6379 | BullMQ 队列 + 发布元数据 |
+| minio | 9000 / 9001 | S3 API / console（bucket: `slidev-ppt`） |
+
+> render-service 通过挂载 `/var/run/docker.sock` 访问宿主 Docker daemon 以起停 dev server
+> 容器——**仅开发环境**；生产用 K8s 或 DinD。
+
+### 验证发布链路
+
+无需前端，直接 curl 后端：
+
+```bash
+# 入队构建（pptId 任取；md 为 Slidev MD）
+curl -X POST http://localhost:3000/api/ppt/publish \
+  -H 'content-type: application/json' \
+  -d '{"pptId":"demo","md":"---\ntheme: seriph\n---\n# Hello\n\n## page 2\n","components":[]}'
+
+# 轮询发布状态，published 后返回公开 URL
+curl http://localhost:3000/api/ppt/demo
+
+# 公开 URL 形如 http://localhost:9000/slidev-ppt/p/demo/ （直走 MinIO，不经过 Node）
+```
+
+同一内容二次发布命中内容哈希缓存，秒回相同 URL（`cached: true`）。
+
+### 常用命令
+
+```bash
+docker compose logs -f web build-worker   # 看日志
+docker compose down                        # 停止（保留数据卷）
+docker compose down -v                     # 停止并清空 redis/minio 数据
+```
+

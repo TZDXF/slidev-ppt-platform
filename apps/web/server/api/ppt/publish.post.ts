@@ -6,8 +6,9 @@
  *
  * 同一内容二次发布命中缓存时，build-worker 直接复用已发布产物，秒回。
  */
-import { parseSlidev, contentHash } from '@slidev-ppt/shared';
-import type { PublishRecord } from '@slidev-ppt/shared';
+import { parseSlidev } from '@slidev-ppt/shared';
+import { contentHash } from '@slidev-ppt/shared/publish';
+import type { PublishRecord } from '@slidev-ppt/shared/publish';
 import { getBuildQueue, getPublishStore } from '../../utils/publish.js';
 
 interface PublishBody {
