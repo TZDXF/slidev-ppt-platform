@@ -119,10 +119,16 @@ services:
       RENDER_IMAGE: slidev-ppt-render:latest
       SANDBOX_NETWORK: slidev-sandbox
       SESSIONS_DIR: /data/sessions
+      # dev server 容器按名挂载同一命名卷到 /deck(:ro)；与下方 volumes: render-sessions 对齐
+      SESSION_VOLUME: render-sessions
     volumes:
       # 访问宿主 Docker daemon 以起停 dev server 容器（仅开发环境；生产用 K8s 或 DinD）
       - /var/run/docker.sock:/var/run/docker.sock
       - render-sessions:/data/sessions
+    # 反代按容器名寻址，须与 dev server 容器同处 slidev-sandbox 网络（external，由本服务 ensureSandboxNetwork 创建）
+    networks:
+      - default
+      - slidev-sandbox
 
   # ---- 发布态构建 worker ----
   build-worker:
@@ -159,3 +165,11 @@ volumes:
   redis-data:
   rustfs-data:
   render-sessions:
+
+networks:
+  # 由 render-service 的 ensureSandboxNetwork 预创建的 bridge 网络（黑洞 DNS 隔离出站）。
+  # compose 引用前需已存在：`docker network create slidev-sandbox`（render-service 首启即自动创建）。
+  # render-service 加入此网后才能按容器名反代到 dev server 容器。
+  slidev-sandbox:
+    external: true
+    name: slidev-sandbox

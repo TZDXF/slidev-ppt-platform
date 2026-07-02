@@ -24,6 +24,16 @@ import type { PreviewRequest, PreviewResponse } from './types.js';
 
 const PORT = config.port;
 
+/** 反代上游地址：real 模式按容器名（slidev-sandbox 网络内 DNS）+ 容器内端口直连，
+ *  不再用 127.0.0.1:hostPort（render-service 自身在容器内，loopback 不可达宿主端口映射）。
+ *  mock 模式回退到 hostPort，仅供调度 API 联调，预览反代不可用。 */
+function upstream(s: { containerName: string; hostPort?: number }): { host: string; port: number } {
+  if (config.dockerMode === 'mock') {
+    return { host: '127.0.0.1', port: s.hostPort ?? 0 };
+  }
+  return { host: s.containerName, port: config.containerPort };
+}
+
 function send(res: ServerResponse, code: number, body: unknown): void {
   const json = JSON.stringify(body);
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
@@ -100,21 +110,21 @@ const server = createServer(async (req, res) => {
 // WebSocket 升级：HMR 走 ws，必须转发以保活预览
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
-  const m = url.pathname.match(/^\/p\/([^/]+)(?:\/(.*))?$/);
+  const m = url.pathname.match(/^\/p\/([^/]+)/);
   if (!m) { socket.destroy(); return; }
   const token = m[1]!;
-  const rest = m[2] ?? '';
   const s = getByToken(token);
   if (!s || !s.hostPort || (s.status !== 'ready' && s.status !== 'starting')) {
     socket.destroy();
     return;
   }
   touch(token); // 重置空闲计时器
-  // 原始 TCP 转发：把客户端的 WebSocket 升级请求重写路径后转发到容器，
+  // 原始 TCP 转发：保留完整 /p/<token>/ 路径（Vite --base 自行剥离），Host 沿用浏览器原值。
   // 容器回包原样回写给客户端，后续帧双向 pipe。
-  const target = tcpConnect(s.hostPort, '127.0.0.1', () => {
-    let raw = `${req.method} /${rest}${url.search ?? ''} HTTP/1.1\r\n`;
-    const headers = { ...req.headers, host: `127.0.0.1:${s.hostPort}` };
+  const { host, port } = upstream(s);
+  const target = tcpConnect(port, host, () => {
+    let raw = `${req.method} ${url.pathname}${url.search ?? ''} HTTP/1.1\r\n`;
+    const headers = { ...req.headers };
     for (const [k, v] of Object.entries(headers)) {
       if (v !== undefined) raw += `${k}: ${Array.isArray(v) ? v.join(', ') : v}\r\n`;
     }
@@ -130,10 +140,9 @@ server.on('upgrade', (req, socket, head) => {
 
 /** HTTP 反代到容器，并重置空闲计时器 */
 function proxyHttp(req: IncomingMessage, res: ServerResponse, path: string): void {
-  const m = path.match(/^\/p\/([^/]+)(?:\/(.*))?$/);
+  const m = path.match(/^\/p\/([^/]+)/);
   if (!m) return send(res, 404, { error: 'bad proxy path' });
   const token = m[1]!;
-  const rest = m[2] ?? '';
   const s = getByToken(token);
   if (!s || !s.hostPort) return send(res, 404, { error: 'unknown preview token' });
   if (s.status !== 'ready' && s.status !== 'starting') {
@@ -142,12 +151,16 @@ function proxyHttp(req: IncomingMessage, res: ServerResponse, path: string): voi
   touch(token); // HMR/预览请求重置空闲回收
 
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+  const { host, port } = upstream(s);
+  // 转发完整原始路径（保留 /p/<token>/ 前缀）：Slidev 以 --base /p/<token>/ 启动，
+  // Vite 会自行剥离 base；故反代不做路径改写。Host 头沿用浏览器原值（localhost），
+  // 避免 Vite 的 DNS rebinding 保护拦截容器名主机。
   const proxyReq = httpRequest({
-    host: '127.0.0.1',
-    port: s.hostPort,
+    host,
+    port,
     method: req.method,
-    path: '/' + rest + (url.search || ''),
-    headers: { ...req.headers, host: `127.0.0.1:${s.hostPort}` },
+    path: url.pathname + (url.search || ''),
+    headers: { ...req.headers },
   }, (proxyRes) => {
     res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
     proxyRes.pipe(res);

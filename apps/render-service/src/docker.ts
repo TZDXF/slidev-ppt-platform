@@ -18,8 +18,11 @@ const exec = promisify(execFile);
 
 export interface StartContainerOpts {
   containerName: string;
-  /** 宿主机会话目录，挂载到 /deck（含 slides.md） */
-  sessionDir: string;
+  /** 容器内 slides.md 绝对路径（命名卷挂到 /deck，故形如 /deck/<docId>/slides.md） */
+  slidesPath: string;
+  /** Vite base 路径，形如 /p/<token>/ —— 让 Slidev 资源/HMR 路径都落在反代前缀下，
+   *  浏览器经 /p/<token>/* 反代访问时资源可正确解析。 */
+  basePath: string;
   /** 额外组件宿主机目录（只读），可选 */
   componentsDir?: string;
 }
@@ -54,7 +57,7 @@ export class Docker {
     if (config.dockerMode === 'mock') {
       return this.mockStart(opts);
     }
-    const { containerName, sessionDir, componentsDir } = opts;
+    const { containerName, slidesPath, basePath, componentsDir } = opts;
     const memMb = Math.round(config.containerMemoryBytes / 1024 / 1024);
     const args = [
       'run', '-d',
@@ -77,17 +80,26 @@ export class Docker {
       '-e', 'CHOKIDAR_INTERVAL=500',
       // 随机宿主机端口映射；getHostPort 读取实际分配端口
       '-p', `0:${config.containerPort}`,
-      '-v', `${sessionDir}/slides.md:/app/slides.md`,
+      // 挂载命名卷到 /deck（:rw）：render-service 与本容器共享同一卷，slides.md 由前者写入。
+      // 不再用单文件 bind（-v host/slides.md:/app/slides.md）：render-service 跑在容器内经宿主
+      // docker.sock 起容器，单文件 bind 的源路径会被宿主 daemon 解释为宿主路径，而该路径在宿主
+      // 不存在（数据在命名卷里），Docker 会建成空目录挂入容器 → Slidev 读目录 EISDIR 崩溃。命名卷按名解析无此问题。
+      // :rw 是因为 Slidev 需在项目根 /deck/<docId>/ 下写 node_modules/.slidev/virtual 虚拟模块；
+      // 沙箱由 --cap-drop ALL + no-new-privileges + 黑洞 DNS + 资源限额保证，会话目录为用户自身数据。
+      '-v', `${config.sessionVolume}:/deck`,
     ];
     if (componentsDir) {
-      // 额外启用组件只读挂载到 /app/components/extra（白名单由调用方保证）
+      // 额外启用组件只读挂载到 /app/components/extra（白名单由调用方保证）。
+      // /app 未被卷覆盖，镜像内置 /app/components 仍在；/deck/<docId>/components 符号链接指向它，
+      // 故 Slidev 在项目根 /deck/<docId> 下既能看到内置组件也能看到 extra。
       args.push('-v', `${componentsDir}:/app/components/extra:ro`);
     }
     args.push(
       '-w', '/app',
       config.image,
-      // Slidev 52 移除了 --host；--remote 监听公网主机（bind 默认 0.0.0.0），使 -p 端口可达
-      'slidev', 'slides.md', '--port', String(config.containerPort), '--remote',
+      // slidesPath 为容器内绝对路径（/deck/<docId>/slides.md）；--remote 使 0.0.0.0 监听，端口映射可达；
+      // --base /p/<token>/ 让 Vite 资源/HMR 路径落在反代前缀下，浏览器经 /p/<token>/* 访问资源可解析。
+      'slidev', slidesPath, '--port', String(config.containerPort), '--remote', '--base', basePath,
     );
     await exec(config.dockerBin, args);
 
@@ -119,6 +131,19 @@ export class Docker {
       return Number.isFinite(code) ? code : null;
     } catch {
       return null;
+    }
+  }
+
+  /** 拉取容器日志（崩溃诊断：启动超时时回传，而非只让前端干等 30s） */
+  async logs(containerName: string, tail = 200): Promise<string> {
+    if (config.dockerMode === 'mock') return '';
+    try {
+      const { stdout } = await exec(config.dockerBin, [
+        'logs', '--tail', String(tail), containerName,
+      ], { maxBuffer: 4 * 1024 * 1024 });
+      return stdout;
+    } catch {
+      return '';
     }
   }
 

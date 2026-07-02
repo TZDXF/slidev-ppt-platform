@@ -6,9 +6,13 @@
 # 构建（在仓库根目录）：
 #   docker build -f apps/render-service/Dockerfile -t slidev-ppt-render:latest .
 #
-# 运行时由 render-service 挂载 slides.md 到 /app/slides.md，并以此镜像启动：
-#   slidev slides.md --port 3030 --host 0.0.0.0
-# 主题/组件已在镜像内预装，因此容器可在 --internal 网络下禁用出站。
+# 运行时由 render-service 把命名卷 render-sessions 以 :ro 挂载到 /deck，
+# slides.md 位于 /deck/<docId>/slides.md，以此镜像启动：
+#   slidev /deck/<docId>/slides.md --port 3030 --remote
+# 用命名卷而非单文件 bind：render-service 跑在容器内、经宿主 docker.sock 起容器，
+# 单文件 bind 的源路径会被宿主 daemon 当作宿主路径，而该路径在宿主不存在 → Docker 建成空目录
+# → 容器内 slides.md 是目录 → Slidev 读目录 EISDIR 崩溃。命名卷按名解析无此问题。
+# 主题/组件已在镜像内预装，/deck/<docId>/components 符号链接指向镜像 /app/components。
 
 FROM node:20-slim
 

@@ -33,6 +33,14 @@ export interface Config {
   sandboxNetwork: string;
   /** 会话文件根目录（每文档一个子目录，挂载进容器） */
   sessionsDir: string;
+  /**
+   * 会话命名卷名。render-service 自身以 ${sessionsDir} 挂载该卷（compose: render-sessions:/data/sessions），
+   * dev server 容器则以 :ro 挂载同一卷到 /deck —— 必须用命名卷而非 bind 路径，因为 render-service
+   * 跑在容器内、经宿主 docker.sock 起容器，bind mount 的源路径会被宿主 daemon 解释为宿主路径，
+   * 而宿主上并不存在 /data/sessions/...（数据在命名卷里），Docker 便会把源路径建成空目录挂进容器，
+   * Slidev 读目录即 EISDIR 崩溃。命名卷由 daemon 按名解析，两端指向同一份数据，绕开路径翻译陷阱。
+   */
+  sessionVolume: string;
   /** 内置组件目录（镜像内路径，由 Dockerfile 预装） */
   builtinComponentsDir: string;
   /** 预览 URL 基址。本地：http://localhost:3100 → previewUrl = ${base}/p/<token> */
@@ -64,6 +72,7 @@ export const config: Config = {
   image: process.env.RENDER_IMAGE ?? 'slidev-ppt-render:latest',
   sandboxNetwork: process.env.SANDBOX_NETWORK ?? 'slidev-sandbox',
   sessionsDir: process.env.SESSIONS_DIR ?? './.sessions',
+  sessionVolume: process.env.SESSION_VOLUME ?? 'render-sessions',
   builtinComponentsDir: process.env.BUILTIN_COMPONENTS_DIR ?? '/app/components',
   previewBase: process.env.PREVIEW_BASE ?? `http://localhost:${num(process.env.PORT, 3100)}`,
   previewMode: (process.env.PREVIEW_MODE ?? 'port') as 'port' | 'subdomain',
