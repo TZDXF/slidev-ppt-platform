@@ -1,6 +1,6 @@
 # docker-compose.yml — Slidev PPT 平台一键编排（开发 / 实跑）
 #
-# 编排：redis（队列 + PublishStore）+ minio（S3 兼容对象存储，替代 OSS）
+# 编排：redis（队列 + PublishStore）+ rustfs（S3 兼容对象存储，替代 OSS）
 #       + web（Nuxt）+ render-service（dev server 容器调度）+ build-worker（slidev build 队列）。
 #
 # 仅 ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL 需宿主 .env 提供；其余依赖项在此注入。
@@ -28,34 +28,34 @@ services:
       timeout: 3s
       retries: 10
 
-  # ---- 本地 S3 兼容对象存储（替代阿里云 OSS）----
-  minio:
-    image: minio/minio:latest
+  # ---- 本地 S3 兼容对象存储（RustFS，替代阿里云 OSS / MinIO）----
+  rustfs:
+    image: rustfs/rustfs:latest
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_CONSOLE_ENABLE: "true"
     ports:
       - "9000:9000"   # S3 API
       - "9001:9001"   # web console
     volumes:
-      - minio-data:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      - rustfs-data:/data
+    # RustFS 无稳定可用的 health 端点；依赖方改用 service_started，
+    # 由 rustfs-init 的 mc 重试连接确认就绪。
 
-  # 一次性：创建 bucket slidev-ppt（minio 就绪后）
-  minio-init:
+  # 一次性：创建 bucket slidev-ppt（rustfs 就绪后；mc 兼容 RustFS S3 API）
+  rustfs-init:
     image: minio/mc:latest
     depends_on:
-      minio:
-        condition: service_healthy
+      rustfs:
+        condition: service_started
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        mc alias set local http://rustfs:9000 rustfsadmin rustfsadmin && break;
+        echo 'waiting rustfs...'; sleep 2;
+      done &&
       mc mb --ignore-existing local/slidev-ppt &&
       mc anonymous set download local/slidev-ppt &&
       echo 'bucket slidev-ppt ready (public download)'
@@ -72,9 +72,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
-      minio-init:
+      rustfs:
+        condition: service_started
+      rustfs-init:
         condition: service_completed_successfully
       render-service:
         condition: service_started
@@ -91,14 +91,14 @@ services:
       RENDER_SERVICE_URL: http://render-service:3100
       # 队列
       REDIS_URL: redis://redis:6379
-      # 对象存储 → MinIO
-      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      # 对象存储 → RustFS
+      OBJECT_STORAGE_ENDPOINT: http://rustfs:9000
       OBJECT_STORAGE_BUCKET: slidev-ppt
       OBJECT_STORAGE_REGION: us-east-1
       OBJECT_STORAGE_FORCE_PATH_STYLE: "true"
-      OBJECT_STORAGE_ACCESS_KEY: minioadmin
-      OBJECT_STORAGE_SECRET_KEY: minioadmin
-      # 开发期公开产物直走 MinIO（生产换 CDN 域）
+      OBJECT_STORAGE_ACCESS_KEY: rustfsadmin
+      OBJECT_STORAGE_SECRET_KEY: rustfsadmin
+      # 开发期公开产物直走 RustFS（生产换 CDN 域）
       CDN_BASE_URL: http://localhost:9000/slidev-ppt
 
   # ---- 渲染调度服务（按需起停 dev server 容器）----
@@ -134,22 +134,22 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
-      minio-init:
+      rustfs:
+        condition: service_started
+      rustfs-init:
         condition: service_completed_successfully
     environment:
       REDIS_URL: redis://redis:6379
       BUILD_CONCURRENCY: "2"
       BUILD_TIMEOUT_MS: "120000"
-      # 对象存储 → MinIO
-      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      # 对象存储 → RustFS
+      OBJECT_STORAGE_ENDPOINT: http://rustfs:9000
       OBJECT_STORAGE_BUCKET: slidev-ppt
       OBJECT_STORAGE_REGION: us-east-1
       OBJECT_STORAGE_FORCE_PATH_STYLE: "true"
-      OBJECT_STORAGE_ACCESS_KEY: minioadmin
-      OBJECT_STORAGE_SECRET_KEY: minioadmin
-      # 开发期公开产物直走 MinIO
+      OBJECT_STORAGE_ACCESS_KEY: rustfsadmin
+      OBJECT_STORAGE_SECRET_KEY: rustfsadmin
+      # 开发期公开产物直走 RustFS
       CDN_BASE_URL: http://localhost:9000/slidev-ppt
       # 镜像内已预装 slidev CLI + 主题（见 Dockerfile）
       SLIDEV_BIN: slidev
@@ -157,5 +157,5 @@ services:
 
 volumes:
   redis-data:
-  minio-data:
+  rustfs-data:
   render-sessions:
