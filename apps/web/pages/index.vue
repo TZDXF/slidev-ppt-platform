@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { PanelLeft, Code2, Eye } from 'lucide-vue-next';
+import { PanelLeft, Code2, Eye, Rocket, Loader2 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import ChatPanel from '@/components/chat/ChatPanel.vue';
 import MdEditor from '@/components/editor/MdEditor.vue';
 import PreviewFrame from '@/components/preview/PreviewFrame.vue';
+import PublishDialog from '@/components/publish/PublishDialog.vue';
 import { useDocumentStore } from '@/stores/document';
+import { usePublishStore } from '@/stores/publish';
 
 const doc = useDocumentStore();
+const pub = usePublishStore();
 
 // 编辑器默认隐藏（"原理编辑器默认不展示"）
 const editorVisible = ref(false);
@@ -48,8 +51,24 @@ onBeforeUnmount(() => { void doc.stopPreview(); });
           <Code2 class="h-4 w-4" />
           <span class="hidden sm:inline">编辑器</span>
         </Button>
-        <Button variant="ghost" size="icon" class="h-8 w-8" aria-label="预览" disabled>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8"
+          aria-label="预览"
+          disabled
+        >
           <Eye class="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          class="h-8 gap-1.5"
+          :disabled="pub.publishing"
+          @click="pub.publish()"
+        >
+          <Loader2 v-if="pub.publishing" class="h-4 w-4 animate-spin" />
+          <Rocket v-else class="h-4 w-4" />
+          <span class="hidden sm:inline">{{ pub.publishing ? '发布中…' : '发布' }}</span>
         </Button>
       </div>
     </header>
@@ -105,5 +124,8 @@ onBeforeUnmount(() => { void doc.stopPreview(); });
         @click="chatOpen = false"
       />
     </div>
+
+    <!-- 发布结果浮层 -->
+    <PublishDialog />
   </div>
 </template>
