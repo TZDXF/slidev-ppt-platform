@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { User, Sparkles } from 'lucide-vue-next';
+import { User, Sparkles, AlertTriangle } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
@@ -63,20 +63,25 @@ defineEmits<{
         </span>
       </div>
 
-      <!-- 破坏性操作待确认卡片 -->
+      <!-- 破坏性操作待确认卡片（仅 deleteSlide / moveSlide；这是操作确认，不是权限授权） -->
       <div
         v-if="message.pendingConfirm"
         class="flex flex-col gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs"
       >
-        <p class="text-foreground">{{ message.pendingConfirm.message }}</p>
+        <div class="flex items-center gap-1.5 font-medium text-foreground">
+          <AlertTriangle class="h-3.5 w-3.5 text-amber-600" />
+          <span>确认执行破坏性操作？</span>
+        </div>
+        <p class="text-muted-foreground">{{ message.pendingConfirm.message }}</p>
         <div class="flex items-center gap-2">
           <Button
             size="sm"
+            variant="destructive"
             class="h-7"
             :disabled="confirmDisabled"
             @click="$emit('confirm', message.id)"
           >
-            应用
+            执行
           </Button>
           <Button
             size="sm"
