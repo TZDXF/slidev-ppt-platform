@@ -35,6 +35,14 @@ async function handleSend() {
   draft.value = '';
   await chat.sendMessage(text, doc.docMd);
 }
+
+function handleConfirm(messageId: string) {
+  void chat.confirmPending(messageId, doc.docMd);
+}
+
+function handleCancel(messageId: string) {
+  chat.cancelPending(messageId);
+}
 </script>
 
 <template>
@@ -64,6 +72,8 @@ async function handleSend() {
           v-for="m in chat.messages"
           :key="m.id"
           :message="m"
+          @confirm="handleConfirm"
+          @cancel="handleCancel"
         />
       </template>
       <div v-else class="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
