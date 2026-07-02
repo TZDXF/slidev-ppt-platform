@@ -13,8 +13,8 @@
 import { Worker } from 'bullmq';
 import { rmSync } from 'node:fs';
 import Redis from 'ioredis';
-import { RedisPublishStore, contentHash } from '@slidev-ppt/shared';
-import type { BuildJobData, PublishRecord } from '@slidev-ppt/shared';
+import { RedisPublishStore, contentHash } from '@slidev-ppt/shared/publish';
+import type { BuildJobData, PublishRecord } from '@slidev-ppt/shared/publish';
 import { runSlidevBuild } from './builder.js';
 import { createObjectStorage } from './storage.js';
 
