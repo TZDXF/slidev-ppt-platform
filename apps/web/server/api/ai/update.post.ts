@@ -126,7 +126,7 @@ export default defineEventHandler(async (event) => {
           type: 'pending_confirm',
           requestId,
           ops,
-          message: '本次修改包含删页 / 重排操作，需确认后才会应用',
+          message: '本次修改包含删页 / 重排操作，会直接改变页面结构，请确认是否执行。',
         });
         send('done', { type: 'done', ops });
         return;
