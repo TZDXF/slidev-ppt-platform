@@ -12,6 +12,8 @@
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { config } from './config.js';
 
 const exec = promisify(execFile);
@@ -49,6 +51,63 @@ export async function ensureSandboxNetwork(): Promise<void> {
   } catch {
     // 已存在或权限不足，忽略
   }
+}
+
+/**
+ * 自省 render-service 自身挂载，解析出 SESSIONS_DIR 实际所在的命名卷名，
+ * 覆盖 config.sessionVolume。这是修复 EISDIR 的关键。
+ *
+ * 背景：render-service 跑在容器内、经宿主 docker.sock 起停 dev server 容器。
+ * dev server 容器的 `-v <卷名>:/deck` 由宿主 daemon 按名解析，必须与本服务自身
+ * 挂载的命名卷名**完全一致**，否则两端挂到不同卷：
+ *   - 本服务把 slides.md 写进 compose 创建的卷 `slidev-ppt-platform_render-sessions`
+ *     （compose 会给声明的卷加项目名前缀）；
+ *   - dev server 却挂了 config 默认的 `render-sessions`（无前缀，是另一个空卷）；
+ *   - dev server 容器内 /deck/<docId>/slides.md 不存在，单文件/空目录被 Slidev
+ *     parser 当目录读 → EISDIR 崩溃。
+ *
+ * 直接把 compose 卷名写死成 `render-sessions` 不可行（compose 必加项目前缀）；
+ * 让 compose 用 external 卷又引入「卷须先于 compose 存在」的引导问题。这里改为
+ * 运行时读 /proc/self/mountinfo，找到 SESSIONS_DIR 挂载点对应的卷源路径，正则
+ * 抽出卷名 —— 对任意项目前缀都自洽，零额外配置。
+ */
+export async function resolveSessionVolume(): Promise<string> {
+  if (config.dockerMode === 'mock') return config.sessionVolume;
+  const target = resolve(config.sessionsDir);
+  try {
+    const data = await readFile('/proc/self/mountinfo', 'utf8');
+    for (const line of data.split('\n')) {
+      // 格式：mountID parentID major:minor root mountPoint options ... - fstype source superOpts
+      const dashIdx = line.indexOf(' - ');
+      if (dashIdx < 0) continue;
+      const left = line.slice(0, dashIdx).split(' ');
+      const mountPoint = left[4];
+      const root = left[3]; // 卷在宿主 fs 内的根路径，形如 .../volumes/<name>/_data
+      if (mountPoint === target && root) {
+        const m = root.match(/\/volumes\/([^/]+)\//);
+        if (m && m[1]) return m[1];
+      }
+    }
+  } catch {
+    // 非 Linux 或读不到 mountinfo，走兜底
+  }
+  // 兜底：用 docker CLI 查自身容器挂载（hostname 即短容器 id）
+  try {
+    const selfId = process.env.HOSTNAME ?? '';
+    if (selfId) {
+      const { stdout } = await exec(config.dockerBin, [
+        'inspect', '--format', '{{range .Mounts}}{{.Name}} {{.Destination}}{{"\n"}}{{end}}', selfId,
+      ]);
+      for (const ln of stdout.split('\n')) {
+        const [name, dest] = ln.split(' ');
+        if (dest && resolve(dest) === target && name) return name;
+      }
+    }
+  } catch {
+    // 忽略
+  }
+  console.warn(`[docker] 未能自省会话卷名，回退默认 ${config.sessionVolume}（可能引发 EISDIR）`);
+  return config.sessionVolume;
 }
 
 export class Docker {

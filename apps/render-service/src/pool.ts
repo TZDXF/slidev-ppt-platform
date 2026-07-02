@@ -18,7 +18,7 @@
 import { randomBytes } from 'node:crypto';
 import { get as httpGet } from 'node:http';
 import { config, buildPreviewUrl } from './config.js';
-import { docker, ensureSandboxNetwork } from './docker.js';
+import { docker, ensureSandboxNetwork, resolveSessionVolume } from './docker.js';
 import { sessionStore, EMPTY_DECK } from './session-store.js';
 import type { Session, Metrics, PreviewRequest, PreviewResponse } from './types.js';
 
@@ -356,6 +356,10 @@ export async function healthLoop(): Promise<void> {
 
 export async function initPool(): Promise<void> {
   await ensureSandboxNetwork();
+  // 关键：把 config.sessionVolume 校正为本服务自身实际挂载的命名卷名（带 compose 项目前缀），
+  // 否则 dev server 容器会挂到另一个空卷 → /deck/<docId>/slides.md 不存在 → EISDIR。
+  config.sessionVolume = await resolveSessionVolume();
+  console.log(`[pool] session volume resolved: ${config.sessionVolume}`);
   setInterval(() => {
     void healthLoop().catch((e) => console.error('[pool] healthLoop error', e));
   }, config.healthCheckIntervalMs);
