@@ -8,3 +8,7 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# render-service session files (per-doc MD, generated at runtime)
+.sessions/
+apps/render-service/.sessions/
