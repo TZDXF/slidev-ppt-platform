@@ -59,6 +59,18 @@ export const useDocumentStore = defineStore('document', () => {
   const docMd = ref<string>(DEFAULT_MD);
   /** 文档 ID，渲染服务以它为粒度复用容器；惰性生成，避免 SSR/客户端 hydration 不一致 */
   const docId = ref<string>('');
+  /**
+   * 发布用 PPT ID。与 docId（渲染会话粒度）解耦：发布记录持久化在 Redis，
+   * 同内容二次发布靠 contentHash 命中缓存，pptId 仅标识本次会话的发布记录。
+   * 惰性生成，首次发布时取。
+   */
+  const pptId = ref<string>('');
+
+  /** 首次发布时生成 pptId；已生成则复用 */
+  function ensurePptId(): string {
+    if (!pptId.value) pptId.value = genDocId();
+    return pptId.value;
+  }
 
   const parsed = computed<ParsedDoc>(() => parseSlidev(docMd.value));
 
@@ -211,6 +223,8 @@ export const useDocumentStore = defineStore('document', () => {
   return {
     docMd,
     docId,
+    pptId,
+    ensurePptId,
     parsed,
     slideCount,
     theme,
