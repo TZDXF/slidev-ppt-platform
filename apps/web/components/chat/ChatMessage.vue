@@ -1,12 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { User, Sparkles } from 'lucide-vue-next';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useChatStore } from '@/stores/chat';
 import type { ChatMessage } from '@/stores/chat';
 
 const props = defineProps<{ message: ChatMessage }>();
 
+const chat = useChatStore();
 const isUser = computed(() => props.message.role === 'user');
+// 确认按钮在请求中禁用，避免重复触发
+const confirmDisabled = computed(() => chat.sending);
+
+defineEmits<{
+  confirm: [messageId: string];
+  cancel: [messageId: string];
+}>();
 </script>
 
 <template>
@@ -51,6 +61,33 @@ const isUser = computed(() => props.message.role === 'user');
         <span class="text-foreground">
           {{ message.ops.map((o) => o.type).join('、') }}
         </span>
+      </div>
+
+      <!-- 破坏性操作待确认卡片 -->
+      <div
+        v-if="message.pendingConfirm"
+        class="flex flex-col gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs"
+      >
+        <p class="text-foreground">{{ message.pendingConfirm.message }}</p>
+        <div class="flex items-center gap-2">
+          <Button
+            size="sm"
+            class="h-7"
+            :disabled="confirmDisabled"
+            @click="$emit('confirm', message.id)"
+          >
+            应用
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="h-7"
+            :disabled="confirmDisabled"
+            @click="$emit('cancel', message.id)"
+          >
+            取消
+          </Button>
+        </div>
       </div>
     </div>
   </div>
