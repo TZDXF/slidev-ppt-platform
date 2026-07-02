@@ -10,7 +10,8 @@
     "./*": "./src/*"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./test/register.mjs --test test/*.test.mjs"
   },
   "dependencies": {
     "ioredis": "^5.4.0"

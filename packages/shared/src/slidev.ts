@@ -29,6 +29,29 @@ const FRONTMATTER_DELIM = '---';
 const SLIDE_DELIM = '\n---\n';
 
 /**
+ * 从 frontmatter raw 文本中提取 theme 字段值。
+ * 兼容 `theme: seriph` 与 `theme: "seriph"` / `theme: 'seriph'`。
+ * raw 仍是真相源，theme 仅作为解析缓存，不参与序列化。
+ */
+function extractTheme(raw: string): string | undefined {
+  for (const line of raw.split('\n')) {
+    const m = line.match(/^theme:\s*(.+?)\s*$/);
+    if (!m || m[1] === undefined) continue;
+    let val = m[1];
+    // 去引号
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    const trimmed = val.trim();
+    return trimmed === '' ? undefined : trimmed;
+  }
+  return undefined;
+}
+
+/**
  * 解析 Slidev MD 文档为 frontmatter + slides。
  * 容错处理：首部若无 frontmatter，则 raw 为空字符串。
  */
@@ -42,7 +65,8 @@ export function parseSlidev(md: string): ParsedDoc {
     const closeIdx = text.indexOf('\n' + FRONTMATTER_DELIM + '\n', FRONTMATTER_DELIM.length);
     if (closeIdx !== -1) {
       const end = closeIdx + FRONTMATTER_DELIM.length + 1; // 含末尾 \n
-      frontmatter = { raw: text.slice(FRONTMATTER_DELIM.length + 1, closeIdx) };
+      const raw = text.slice(FRONTMATTER_DELIM.length + 1, closeIdx);
+      frontmatter = { raw, theme: extractTheme(raw) };
       body = text.slice(end);
     }
   }
