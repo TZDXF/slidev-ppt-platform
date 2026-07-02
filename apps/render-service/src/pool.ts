@@ -16,6 +16,7 @@
  *   都重置定时器；超时（默认 5min，可配 5-10min）销毁容器并清理会话目录。
  */
 import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { get as httpGet } from 'node:http';
 import { config, buildPreviewUrl } from './config.js';
@@ -105,6 +106,10 @@ async function startContainer(s: Session): Promise<void> {
   s.startedAt = Date.now();
   s.inGrace = true;
   const sessionDir = resolve(join(config.sessionsDir, s.docId.replace(/[^a-zA-Z0-9_-]/g, '_')));
+  // 确保 sessionDir 存在并写入 slides.md（必须在 docker.start 之前，否则 Docker
+  // 把不存在的 slides.md 路径当作目录创建 → 容器内 EISDIR）
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, 'slides.md'), s.md ?? '', 'utf8');
   const started = await docker.start({
     containerName: s.containerName,
     sessionDir,
