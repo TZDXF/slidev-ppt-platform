@@ -36,13 +36,14 @@ export default defineNuxtConfig({
   },
 
   // 后端代理 Claude API，key 不出服务端
+  // 运行时从 NUXT_<KEY> 环境变量注入（Nuxt 自动映射）；compose 里用 NUXT_ 前缀
   runtimeConfig: {
-    anthropicApiKey: '', // ANTHROPIC_API_KEY，国内需走代理
-    anthropicBaseUrl: '', // ANTHROPIC_BASE_URL，代理地址
-    anthropicChatModel: '', // ANTHROPIC_CHAT_MODEL，对话/页级 CRUD（默认 claude-sonnet-4-6）
-    anthropicStructureModel: '', // ANTHROPIC_STRUCTURE_MODEL，大纲/全量重生成（默认 claude-opus-4-8）
-    aiOpsMode: 'tool_use', // AI_OPS_MODE：tool_use（生产）| json（兼容不支持 tool_use 的代理）
-    renderServiceUrl: process.env.RENDER_SERVICE_URL || '', // RENDER_SERVICE_URL，渲染调度服务地址（control API 经 server 代理，previewUrl 直连）
+    anthropicApiKey: '', // NUXT_ANTHROPIC_API_KEY
+    anthropicBaseUrl: '', // NUXT_ANTHROPIC_BASE_URL
+    anthropicChatModel: '', // NUXT_ANTHROPIC_CHAT_MODEL
+    anthropicStructureModel: '', // NUXT_ANTHROPIC_STRUCTURE_MODEL
+    aiOpsMode: 'tool_use', // NUXT_AI_OPS_MODE：tool_use | json
+    renderServiceUrl: '', // NUXT_RENDER_SERVICE_URL
     public: {
       // 客户端可见配置
     },

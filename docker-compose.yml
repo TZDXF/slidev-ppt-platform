@@ -81,14 +81,14 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # AI 链路：从宿主 .env 读（国内走代理）
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
-      ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-step-3.7-flash}
-      ANTHROPIC_STRUCTURE_MODEL: ${ANTHROPIC_STRUCTURE_MODEL:-step-3.7-flash}
-      AI_OPS_MODE: ${AI_OPS_MODE:-tool_use}
-      # 渲染调度服务（compose 内服务名）
-      RENDER_SERVICE_URL: http://render-service:3100
+      # AI 链路：NUXT_ 前缀注入 Nuxt runtimeConfig（国内走代理）
+      NUXT_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      NUXT_ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      NUXT_ANTHROPIC_CHAT_MODEL: ${ANTHROPIC_CHAT_MODEL:-step-3.7-flash}
+      NUXT_ANTHROPIC_STRUCTURE_MODEL: ${ANTHROPIC_STRUCTURE_MODEL:-step-3.7-flash}
+      NUXT_AI_OPS_MODE: ${AI_OPS_MODE:-tool_use}
+      # 渲染调度服务（compose 内服务名；Nuxt runtimeConfig 经 NUXT_ 前缀注入）
+      NUXT_RENDER_SERVICE_URL: http://render-service:3100
       # 队列
       REDIS_URL: redis://redis:6379
       # 对象存储 → RustFS
