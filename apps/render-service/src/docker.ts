@@ -51,6 +51,23 @@ export async function ensureSandboxNetwork(): Promise<void> {
   }
 }
 
+/** 确保会话命名卷存在。
+ *
+ * render-service 自身以该卷挂载到 /data/sessions（写 slides.md），dev server 容器以
+ * 同一卷挂载到 /deck（读 slides.md）。两端必须指向同一卷名 —— 故 compose 里该卷
+ * 声明为 external（name: render-sessions），由本函数按 config.sessionVolume 名创建，
+ * 避免 compose 给卷名加项目前缀（<project>_render-sessions）导致两端卷名不一致、
+ * dev server 读不到 slides.md。与 ensureSandboxNetwork 同为幂等自愈。
+ */
+export async function ensureSessionVolume(): Promise<void> {
+  if (config.dockerMode === 'mock') return;
+  try {
+    await exec(config.dockerBin, ['volume', 'create', config.sessionVolume]);
+  } catch {
+    // 已存在或权限不足，忽略
+  }
+}
+
 export class Docker {
   /** 启动一个 Slidev dev server 容器，返回宿主机映射端口 */
   async start(opts: StartContainerOpts): Promise<StartedContainer> {

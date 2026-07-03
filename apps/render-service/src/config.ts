@@ -86,5 +86,7 @@ export function buildPreviewUrl(token: string): string {
     // 例：PREVIEW_BASE=ppt.example.com → http://preview-<token>.ppt.example.com
     return `http://preview-${token}.${config.previewBase}`;
   }
-  return `${config.previewBase}/p/${token}`;
+  // 必须带尾斜杠：dev server 以 --base /p/<token>/ 启动，Vite 对裸 /p/<token>（无尾斜杠）
+  // 直接回 404 "did you mean /p/<token>/" 而非 302 跳转，iframe 接入会拿到 404 空白页。
+  return `${config.previewBase}/p/${token}/`;
 }

@@ -18,7 +18,7 @@
 import { randomBytes } from 'node:crypto';
 import { get as httpGet } from 'node:http';
 import { config, buildPreviewUrl } from './config.js';
-import { docker, ensureSandboxNetwork } from './docker.js';
+import { docker, ensureSandboxNetwork, ensureSessionVolume } from './docker.js';
 import { sessionStore, EMPTY_DECK } from './session-store.js';
 import type { Session, Metrics, PreviewRequest, PreviewResponse } from './types.js';
 
@@ -356,6 +356,7 @@ export async function healthLoop(): Promise<void> {
 
 export async function initPool(): Promise<void> {
   await ensureSandboxNetwork();
+  await ensureSessionVolume();
   setInterval(() => {
     void healthLoop().catch((e) => console.error('[pool] healthLoop error', e));
   }, config.healthCheckIntervalMs);

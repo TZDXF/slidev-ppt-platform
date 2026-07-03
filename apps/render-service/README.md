@@ -42,8 +42,9 @@
 
 ## 预览 URL 形态
 
-- `PREVIEW_MODE=port`（默认，本地联调）：`previewUrl = ${PREVIEW_BASE}/p/<token>`
-  流量经本服务反代，天然支持空闲计时与 HMR 转发。
+- `PREVIEW_MODE=port`（默认，本地联调）：`previewUrl = ${PREVIEW_BASE}/p/<token>/`
+  流量经本服务反代，天然支持空闲计时与 HMR 转发。尾斜杠不可省：dev server 以
+  `--base /p/<token>/` 启动，Vite 对裸 `/p/<token>` 回 404 而非 302；反代另对裸路径补 302 兜底。
 - `PREVIEW_MODE=subdomain`（生产）：`previewUrl = http://preview-<token>.<host>`
   由 Nginx 把 `preview-<token>.<host>` 重写到 `/p/<token>/` 再回源本服务：
   ```nginx
