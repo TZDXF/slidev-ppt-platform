@@ -11,7 +11,8 @@
  * - ALL  /p/:token/*        反代到容器 dev server（HTTP + WS 升级），同时重置空闲计时器
  *
  * 预览 URL 形态（任务要求"子域名/端口反代"）：
- * - 默认 port 模式：previewUrl = ${PREVIEW_BASE}/p/<token>，流量经本服务反代
+ * - 默认 port 模式：previewUrl = ${PREVIEW_BASE}/p/<token>/，流量经本服务反代
+ *   （尾斜杠不可省：dev server 以 --base /p/<token>/ 启动，Vite 对裸 /p/<token> 回 404）
  * - subdomain 模式：previewUrl = http://preview-<token>.<host>，Nginx 重写到 /p/<token>/
  *   （生产由 Nginx 接入，本服务仍承担反代与空闲计时）
  */
@@ -151,6 +152,16 @@ function proxyHttp(req: IncomingMessage, res: ServerResponse, path: string): voi
   touch(token); // HMR/预览请求重置空闲回收
 
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+
+  // Vite 以 --base /p/<token>/ 启动，访问裸 /p/<token>（无尾斜杠）时回 404
+  // "did you mean /p/<token>/" 而非 302。此处补 302 到带斜杠形式（保留 query），
+  // 兜底旧 previewUrl 契约与手动访问；buildPreviewUrl 现已直接发带斜杠形式。
+  if (url.pathname === `/p/${token}`) {
+    res.writeHead(302, { location: `/p/${token}/${url.search || ''}` });
+    res.end();
+    return;
+  }
+
   const { host, port } = upstream(s);
   // 转发完整原始路径（保留 /p/<token>/ 前缀）：Slidev 以 --base /p/<token>/ 启动，
   // Vite 会自行剥离 base；故反代不做路径改写。Host 头沿用浏览器原值（localhost），
