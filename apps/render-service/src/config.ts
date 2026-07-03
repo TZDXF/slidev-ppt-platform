@@ -43,7 +43,9 @@ export interface Config {
   sessionVolume: string;
   /** 内置组件目录（镜像内路径，由 Dockerfile 预装） */
   builtinComponentsDir: string;
-  /** 预览 URL 基址。本地：http://localhost:3100 → previewUrl = ${base}/p/<token> */
+  /** 预览 URL 基址。本地：http://localhost:3100 → previewUrl = ${base}/p/<token>/。
+   *  必须是含协议与端口的绝对 origin（http://<host>:3100）；若为空字符串，buildPreviewUrl
+   *  会退化成 /p/<token> 相对路径，前端 iframe 会相对父页面（web 3000）解析 → 落到 Nuxt 404。 */
   previewBase: string;
   /** 预览 URL 形态：port（默认，反代到本服务）| subdomain（Nginx 把 preview-<token>.<host> 重写到 /p/<token>/） */
   previewMode: 'port' | 'subdomain';
@@ -74,7 +76,9 @@ export const config: Config = {
   sessionsDir: process.env.SESSIONS_DIR ?? './.sessions',
   sessionVolume: process.env.SESSION_VOLUME ?? 'render-sessions',
   builtinComponentsDir: process.env.BUILTIN_COMPONENTS_DIR ?? '/app/components',
-  previewBase: process.env.PREVIEW_BASE ?? `http://localhost:${num(process.env.PORT, 3100)}`,
+  // 用 || 而非 ??：PREVIEW_BASE="" （空字符串，非 undefined）同样要回退默认值，否则
+  // buildPreviewUrl 会产出相对路径 /p/<token>，iframe 相对父页面 origin（web 3000）解析 → Nuxt 404。
+  previewBase: process.env.PREVIEW_BASE || `http://localhost:${num(process.env.PORT, 3100)}`,
   previewMode: (process.env.PREVIEW_MODE ?? 'port') as 'port' | 'subdomain',
   dockerBin: process.env.DOCKER_BIN ?? 'docker',
   dockerMode: (process.env.DOCKER_MODE ?? 'real') as 'real' | 'mock',
@@ -87,6 +91,7 @@ export function buildPreviewUrl(token: string): string {
     return `http://preview-${token}.${config.previewBase}`;
   }
   // 必须带尾斜杠：dev server 以 --base /p/<token>/ 启动，Vite 对裸 /p/<token>（无尾斜杠）
-  // 直接回 404 "did you mean /p/<token>/" 而非 302 跳转，iframe 接入会拿到 404 空白页。
+  // 直接回 404 "did you mean /p/<token>/" 而非 302 跳转。iframe 拿到 404 空白页，Slidev 客户端
+  // 路由根本不初始化，翻页也就无从谈起。尾斜杠让 iframe 直接命中 index.html。
   return `${config.previewBase}/p/${token}/`;
 }
