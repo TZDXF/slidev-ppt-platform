@@ -31,6 +31,8 @@ export default defineNuxtConfig({
         '@codemirror/language',
         'reka-ui',
         'lucide-vue-next',
+        'markdown-it',
+        'dompurify',
       ],
     },
   },
