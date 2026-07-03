@@ -112,8 +112,8 @@ services:
       - "3100:3100"
     environment:
       PORT: "3100"
-      # previewUrl 经本服务反代（port 模式）；浏览器走宿主 localhost:3100
-      PREVIEW_BASE: http://localhost:3100
+      # previewUrl 经本服务反代（port 模式）；浏览器需用服务器实际 IP 访问，不能用 localhost
+      PREVIEW_BASE: ${PREVIEW_BASE:-http://localhost:3100}
       PREVIEW_MODE: port
       DOCKER_MODE: real
       RENDER_IMAGE: slidev-ppt-render:latest
