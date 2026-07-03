@@ -165,6 +165,9 @@ volumes:
   redis-data:
   rustfs-data:
   render-sessions:
+    # 显式命名（不带 compose 项目前缀），与 docker.ts 用 config.sessionVolume='render-sessions' 挂载一致；
+    # 否则 compose 创建的卷名是 slidev-ppt-platform_render-sessions，dev server 容器按 render-sessions 挂载会挂到另一个空卷。
+    name: render-sessions
 
 networks:
   # 由 render-service 的 ensureSandboxNetwork 预创建的 bridge 网络（黑洞 DNS 隔离出站）。
