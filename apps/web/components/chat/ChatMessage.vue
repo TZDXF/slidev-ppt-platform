@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import type { ChatMessage } from '@/stores/chat';
+import MarkdownView from './MarkdownView.vue';
 
 const props = defineProps<{ message: ChatMessage }>();
 
@@ -36,7 +37,11 @@ defineEmits<{
     <div :class="cn('flex max-w-[85%] flex-col gap-1', isUser && 'items-end')">
       <div
         :class="cn(
-          'whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-sm leading-relaxed',
+          'break-words rounded-lg px-3 py-2 text-sm leading-relaxed',
+          // 用户消息与错误消息保持纯文本（whitespace-pre-wrap）；AI 正文走 markdown 渲染
+          isUser || message.error
+            ? 'whitespace-pre-wrap'
+            : '',
           isUser
             ? 'bg-primary text-primary-foreground'
             : message.error
@@ -45,6 +50,11 @@ defineEmits<{
         )"
       >
         <span v-if="!message.content && message.streaming" class="text-muted-foreground">思考中…</span>
+        <MarkdownView
+          v-else-if="!isUser && !message.error"
+          :content="message.content"
+          :streaming="message.streaming"
+        />
         <template v-else>{{ message.content }}</template>
         <span
           v-if="message.streaming && message.content"
